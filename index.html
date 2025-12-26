@@ -3,54 +3,121 @@
 <head>
   <title>Deteksi Kemiringan Ruangan</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <style>
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .box {
+      text-align: center;
+      border: 1px solid #ccc;
+      padding: 5px;
+    }
+  </style>
 </head>
 <body>
 
-<h3>Kemiringan Ruangan</h3>
-<p id="angle">0°</p>
+<h3>Visualisasi Kemiringan Ruangan</h3>
+<p><b>Kemiringan Gabungan:</b> <span id="angle">0°</span></p>
 
 <button onclick="saveRight()">Simpan Samping Kanan</button>
 <button onclick="saveBottom()">Simpan Bawah</button>
 
+<div class="grid">
+  <div class="box"><b>LIVE</b><div id="live"></div></div>
+  <div class="box"><b>SAMPING KANAN</b><div id="right"></div></div>
+  <div class="box"><b>BAWAH</b><div id="bottom"></div></div>
+  <div class="box"><b>GABUNGAN</b><div id="combine"></div></div>
+</div>
+
 <script>
-const ESP32_IP = "http://192.168.1.6"; // ← IP ESP32 KAMU
+const ESP32_IP = "http://192.168.1.6";
 
-let scene = new THREE.Scene();
-let camera = new THREE.PerspectiveCamera(75, 400 / 300, 0.1, 1000);
-let renderer = new THREE.WebGLRenderer();
-renderer.setSize(400, 300);
-document.body.appendChild(renderer.domElement);
+// ====== DATA ======
+let savedRight = null;
+let savedBottom = null;
 
-let geometry = new THREE.BoxGeometry(3, 0.5, 3);
-let material = new THREE.MeshNormalMaterial();
-let cube = new THREE.Mesh(geometry, material);
-scene.add(cube);
+// ====== HELPER ======
+function createView(container) {
+  let scene = new THREE.Scene();
+  let camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+  let renderer = new THREE.WebGLRenderer();
+  renderer.setSize(200, 200);
+  document.getElementById(container).appendChild(renderer.domElement);
 
-camera.position.z = 5;
+  let cube = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.3, 2),
+    new THREE.MeshNormalMaterial()
+  );
+  scene.add(cube);
+  camera.position.z = 5;
 
+  return { scene, camera, renderer, cube };
+}
+
+// ====== VIEWS ======
+let liveView   = createView("live");
+let rightView  = createView("right");
+let bottomView = createView("bottom");
+let combView   = createView("combine");
+
+// ====== LIVE UPDATE ======
 function animate() {
-  fetch(`${ESP32_IP}/data`, { mode: "cors" })
+  fetch(`${ESP32_IP}/data`)
     .then(res => res.json())
     .then(data => {
-      cube.rotation.x = data.pitch * Math.PI / 180;
-      cube.rotation.z = data.roll * Math.PI / 180;
+      updateCube(liveView, data.pitch, data.roll);
+      updateCombine();
+    });
 
-      let total = Math.sqrt(data.pitch**2 + data.roll**2);
-      document.getElementById("angle").innerText =
-        total.toFixed(2) + "°";
-    })
-    .catch(err => console.log("Fetch error:", err));
-
-  renderer.render(scene, camera);
+  renderAll();
   requestAnimationFrame(animate);
 }
 
+// ====== UPDATE ======
+function updateCube(view, pitch, roll) {
+  view.cube.rotation.x = pitch * Math.PI / 180;
+  view.cube.rotation.z = roll  * Math.PI / 180;
+}
+
+function renderAll() {
+  [liveView, rightView, bottomView, combView].forEach(v => {
+    v.renderer.render(v.scene, v.camera);
+  });
+}
+
+// ====== SAVE BUTTONS ======
 function saveRight() {
-  fetch(`${ESP32_IP}/save-right`);
+  fetch(`${ESP32_IP}/data`)
+    .then(res => res.json())
+    .then(data => {
+      savedRight = data;
+      updateCube(rightView, data.pitch, data.roll);
+    });
 }
 
 function saveBottom() {
-  fetch(`${ESP32_IP}/save-bottom`);
+  fetch(`${ESP32_IP}/data`)
+    .then(res => res.json())
+    .then(data => {
+      savedBottom = data;
+      updateCube(bottomView, data.pitch, data.roll);
+    });
+}
+
+// ====== COMBINE ======
+function updateCombine() {
+  if (!savedRight || !savedBottom) return;
+
+  let pitch = (savedRight.pitch + savedBottom.pitch) / 2;
+  let roll  = (savedRight.roll  + savedBottom.roll)  / 2;
+
+  updateCube(combView, pitch, roll);
+
+  let total = Math.sqrt(pitch*pitch + roll*roll);
+  document.getElementById("angle").innerText =
+    total.toFixed(2) + "°";
 }
 
 animate();
