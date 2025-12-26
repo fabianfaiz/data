@@ -1,35 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
+  <meta charset="UTF-8">
   <title>Deteksi Kemiringan Ruangan</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
   <style>
+    body {
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 20px;
+      color: #2c3e50;
+    }
+
+    h3 {
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      margin-bottom: 20px;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .angle-box {
+      background: linear-gradient(135deg, #1e88e5, #42a5f5);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 16px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+
+    button {
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      background: #ffffff;
+      color: #333;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
+      gap: 15px;
     }
+
     .box {
-      border: 1px solid #ccc;
-      padding: 5px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      transition: transform 0.2s ease;
+    }
+
+    .box:hover {
+      transform: translateY(-3px);
+    }
+
+    .box-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #555;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 4px;
+    }
+
+    canvas {
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    footer {
+      margin-top: 25px;
+      font-size: 12px;
+      color: #777;
       text-align: center;
     }
   </style>
 </head>
+
 <body>
 
-<h3>Visualisasi Kemiringan Ruangan (MPU6050)</h3>
-<p><b>Sudut Gabungan (Dinding–Lantai):</b> <span id="angle">-</span></p>
+<h3>Visualisasi Kemiringan Ruangan</h3>
+<div class="subtitle">
+  Sistem Pengukuran Sudut Dinding dan Lantai Menggunakan MPU6050 & ESP32
+</div>
 
-<button onclick="saveWall()">Simpan Dinding (Kanan)</button>
-<button onclick="saveFloor()">Simpan Lantai (Bawah)</button>
+<div class="top-bar">
+  <div class="angle-box">
+    Sudut Gabungan: <b><span id="angle">-</span></b>
+  </div>
+
+  <button onclick="saveWall()">Simpan Dinding (Kanan)</button>
+  <button onclick="saveFloor()">Simpan Lantai (Bawah)</button>
+</div>
 
 <div class="grid">
-  <div class="box"><b>LIVE</b><div id="live"></div></div>
-  <div class="box"><b>DINDING</b><div id="wall"></div></div>
-  <div class="box"><b>LANTAI</b><div id="floor"></div></div>
-  <div class="box"><b>GABUNGAN (L)</b><div id="combine"></div></div>
+  <div class="box">
+    <div class="box-title">Live Sensor</div>
+    <div id="live"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Dinding</div>
+    <div id="wall"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Lantai</div>
+    <div id="floor"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Gabungan (L)</div>
+    <div id="combine"></div>
+  </div>
 </div>
+
+<footer>
+  © Sistem Monitoring Kemiringan Ruangan | ESP32 & MPU6050
+</footer>
 
 <script>
 const ESP32 = "http://192.168.1.6";
@@ -41,7 +159,7 @@ let savedFloor = null;
 function createView(id) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);
-  const renderer = new THREE.WebGLRenderer();
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(220, 220);
   document.getElementById(id).appendChild(renderer.domElement);
 
@@ -110,7 +228,7 @@ function angleBetween(v1, v2) {
   return Math.acos(dot / (m1*m2)) * 180 / Math.PI;
 }
 
-// ================= COMBINE (L) =================
+// ================= COMBINE =================
 function updateCombine() {
   if (!savedWall || !savedFloor) return;
 
@@ -128,9 +246,8 @@ function updateCombine() {
   combView.scene.add(wall);
   combView.scene.add(floor);
 
-  const angle = angleBetween(savedWall, savedFloor);
   document.getElementById("angle").innerText =
-    angle.toFixed(2) + "°";
+    angleBetween(savedWall, savedFloor).toFixed(2) + "°";
 }
 
 // ================= LOOP =================
