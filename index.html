@@ -6,7 +6,7 @@
   <style>
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
     }
     .box {
@@ -18,15 +18,16 @@
 </head>
 <body>
 
-<h3>Deteksi Kemiringan Ruangan (Bidang Lantai & Dinding)</h3>
-<p><b>Sudut Gabungan:</b> <span id="angle">-</span></p>
+<h3>Visualisasi Kemiringan Ruangan (MPU6050)</h3>
+<p><b>Sudut Gabungan (Dinding–Lantai):</b> <span id="angle">-</span></p>
 
-<button onclick="saveRight()">Simpan Dinding (Kanan)</button>
-<button onclick="saveBottom()">Simpan Lantai (Bawah)</button>
+<button onclick="saveWall()">Simpan Dinding (Kanan)</button>
+<button onclick="saveFloor()">Simpan Lantai (Bawah)</button>
 
 <div class="grid">
   <div class="box"><b>LIVE</b><div id="live"></div></div>
-  <div class="box"><b>DINDING</b><div id="right"></div></div>
+  <div class="box"><b>DINDING</b><div id="wall"></div></div>
+  <div class="box"><b>LANTAI</b><div id="floor"></div></div>
   <div class="box"><b>GABUNGAN (L)</b><div id="combine"></div></div>
 </div>
 
@@ -44,50 +45,61 @@ function createView(id) {
   renderer.setSize(220, 220);
   document.getElementById(id).appendChild(renderer.domElement);
 
-  camera.position.set(3,3,5);
-  camera.lookAt(0,0,0);
+  camera.position.set(3, 3, 5);
+  camera.lookAt(0, 0, 0);
 
   return { scene, camera, renderer };
 }
 
-const liveView = createView("live");
-const rightView = createView("right");
-const combView = createView("combine");
+const liveView   = createView("live");
+const wallView   = createView("wall");
+const floorView  = createView("floor");
+const combView   = createView("combine");
 
 // ================= OBJECT =================
-function createPlane(w,h,color) {
+function createPlane(w, h) {
   return new THREE.Mesh(
-    new THREE.BoxGeometry(w,h,0.1),
+    new THREE.BoxGeometry(w, h, 0.1),
     new THREE.MeshNormalMaterial()
   );
 }
 
 // ================= LIVE =================
-const liveCube = createPlane(2,0.2);
-liveView.scene.add(liveCube);
-
-// ================= SAVE =================
-function saveRight() {
-  fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
-    savedWall = d;
-    rightView.scene.clear();
-    const wall = createPlane(2,2);
-    applyRotation(wall, d);
-    rightView.scene.add(wall);
-  });
-}
-
-function saveBottom() {
-  fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
-    savedFloor = d;
-    updateCombine();
-  });
-}
+const livePlane = createPlane(2, 0.3);
+liveView.scene.add(livePlane);
 
 // ================= ROTATION =================
 function applyRotation(obj, d) {
   obj.rotation.x = Math.atan2(d.ax, Math.sqrt(d.ay*d.ay + d.az*d.az));
   obj.rotation.z = Math.atan2(d.ay, Math.sqrt(d.ax*d.ax + d.az*d.az));
+}
+
+// ================= SAVE =================
+function saveWall() {
+  fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
+    savedWall = d;
+    wallView.scene.clear();
+
+    const wall = createPlane(2, 2);
+    applyRotation(wall, d);
+    wallView.scene.add(wall);
+
+    updateCombine();
+  });
+}
+
+function saveFloor() {
+  fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
+    savedFloor = d;
+    floorView.scene.clear();
+
+    const floor = createPlane(2, 2);
+    applyRotation(floor, d);
+    floor.rotation.x += Math.PI / 2;
+    floorView.scene.add(floor);
+
+    updateCombine();
+  });
 }
 
 // ================= ANGLE =================
@@ -98,19 +110,19 @@ function angleBetween(v1, v2) {
   return Math.acos(dot / (m1*m2)) * 180 / Math.PI;
 }
 
-// ================= COMBINE (L SHAPE) =================
+// ================= COMBINE (L) =================
 function updateCombine() {
   if (!savedWall || !savedFloor) return;
 
   combView.scene.clear();
 
-  const wall = createPlane(2,2);
+  const wall = createPlane(2, 2);
   applyRotation(wall, savedWall);
   wall.position.x = -1;
 
-  const floor = createPlane(2,2);
+  const floor = createPlane(2, 2);
   applyRotation(floor, savedFloor);
-  floor.rotation.x += Math.PI/2;
+  floor.rotation.x += Math.PI / 2;
   floor.position.y = -1;
 
   combView.scene.add(wall);
@@ -126,10 +138,10 @@ function animate() {
   fetch(`${ESP32}/data`)
     .then(r=>r.json())
     .then(d=>{
-      applyRotation(liveCube, d);
+      applyRotation(livePlane, d);
     });
 
-  [liveView, rightView, combView].forEach(v=>{
+  [liveView, wallView, floorView, combView].forEach(v=>{
     v.renderer.render(v.scene, v.camera);
   });
 
