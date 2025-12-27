@@ -7,79 +7,49 @@
 
 <style>
 body{
-  font-family:"Segoe UI",Roboto,Arial,sans-serif;
+  font-family:Segoe UI,Arial,sans-serif;
   background:#f4f6f8;
   margin:0;
-  padding:20px;
+  padding:24px;
   color:#2c3e50;
 }
-h3{margin-bottom:4px;font-weight:600}
-.subtitle{margin-bottom:20px;color:#555;font-size:14px}
-
-.top-bar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:12px;
-  align-items:center;
-  margin-bottom:20px;
-}
+h3{margin:0}
+.subtitle{color:#666;margin-bottom:20px}
+.top-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
 .angle-box{
-  background:linear-gradient(135deg,#1e88e5,#42a5f5);
+  background:#1e88e5;
   color:#fff;
-  padding:12px 18px;
-  border-radius:10px;
-  font-size:16px;
-  box-shadow:0 6px 16px rgba(0,0,0,.15);
+  padding:12px 20px;
+  border-radius:12px;
 }
-
 button{
-  border:none;
   padding:10px 16px;
-  border-radius:8px;
+  border:none;
+  border-radius:10px;
   cursor:pointer;
-  font-size:14px;
-  font-weight:500;
-  background:#fff;
-  box-shadow:0 4px 10px rgba(0,0,0,.1);
-  transition:.2s;
 }
-button:hover{
-  transform:translateY(-2px);
-  box-shadow:0 6px 14px rgba(0,0,0,.15);
-}
-.btn-reset{
-  background:#e53935;
-  color:#fff;
-}
-
+.btn-reset{background:#e53935;color:#fff}
 .grid{
   display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:15px;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:16px;
 }
 .box{
   background:#fff;
-  border-radius:12px;
-  padding:10px;
-  box-shadow:0 6px 18px rgba(0,0,0,.08);
-}
-.box-title{
-  font-size:13px;
-  font-weight:600;
-  margin-bottom:6px;
-  text-transform:uppercase;
-  border-bottom:1px solid #eee;
-  padding-bottom:4px;
+  border-radius:14px;
+  padding:12px;
+  text-align:center;
 }
 canvas{
-  background:#fafafa;
-  border-radius:8px;
+  width:100%!important;
+  max-width:220px;
+  aspect-ratio:1/1;
 }
 footer{
-  margin-top:25px;
-  font-size:12px;
-  color:#777;
+  margin-top:30px;
   text-align:center;
+  font-size:12px;
+  color:#888;
 }
 </style>
 </head>
@@ -87,9 +57,7 @@ footer{
 <body>
 
 <h3>Visualisasi Kemiringan Ruangan</h3>
-<div class="subtitle">
-Sistem Pengukuran Sudut Dinding dan Lantai (ESP32 + MPU6050)
-</div>
+<div class="subtitle">ESP32 + MPU6050</div>
 
 <div class="top-bar">
   <div class="angle-box">
@@ -101,23 +69,24 @@ Sistem Pengukuran Sudut Dinding dan Lantai (ESP32 + MPU6050)
 </div>
 
 <div class="grid">
-  <div class="box"><div class="box-title">Live</div><div id="live"></div></div>
-  <div class="box"><div class="box-title">Dinding</div><div id="wall"></div></div>
-  <div class="box"><div class="box-title">Lantai</div><div id="floor"></div></div>
-  <div class="box"><div class="box-title">Gabungan (L)</div><div id="combine"></div></div>
+  <div class="box"><b>Live</b><div id="live"></div></div>
+  <div class="box"><b>Dinding</b><div id="wall"></div></div>
+  <div class="box"><b>Lantai</b><div id="floor"></div></div>
+  <div class="box"><b>Gabungan</b><div id="combine"></div></div>
 </div>
 
-<footer>© Monitoring Kemiringan Ruangan</footer>
+<footer>Monitoring Kemiringan Ruangan</footer>
 
 <script>
-/* ================= CONFIG ================= */
+/* ===== CONFIG ===== */
 const ESP32 = "http://192.168.1.6";
+const FETCH_DELAY = 200; // ms
 
-/* ================= STATE ================= */
 let savedWall = null;
 let savedFloor = null;
+let lastFetch = 0;
 
-/* ================= VIEW ================= */
+/* ===== THREE SETUP ===== */
 function createView(id){
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70,1,0.1,100);
@@ -134,33 +103,29 @@ const wallView  = createView("wall");
 const floorView = createView("floor");
 const combView  = createView("combine");
 
-/* ================= OBJECT ================= */
-function createPlane(w,h){
+function plane(w,h){
   return new THREE.Mesh(
     new THREE.BoxGeometry(w,h,0.1),
     new THREE.MeshNormalMaterial()
   );
 }
 
-/* ================= LIVE ================= */
-const livePlane = createPlane(2,0.3);
+const livePlane = plane(2,0.3);
 liveView.scene.add(livePlane);
 
-/* ================= ROTATION ================= */
+/* ===== ROTATION ===== */
 function applyRotation(obj,d){
-  obj.rotation.x = Math.atan2(d.ax,Math.sqrt(d.ay*d.ay+d.az*d.az));
-  obj.rotation.z = Math.atan2(d.ay,Math.sqrt(d.ax*d.ax+d.az*d.az));
+  obj.rotation.x = Math.atan2(d.ax, Math.sqrt(d.ay*d.ay+d.az*d.az));
+  obj.rotation.z = Math.atan2(d.ay, Math.sqrt(d.ax*d.ax+d.az*d.az));
 }
 
-/* ================= ANGLE UTILS ================= */
 function getAngles(d){
-  return{
-    pitch:Math.atan2(d.ax,Math.sqrt(d.ay*d.ay+d.az*d.az)),
-    roll :Math.atan2(d.ay,Math.sqrt(d.ax*d.ax+d.az*d.az))
+  return {
+    pitch: Math.atan2(d.ax, Math.sqrt(d.ay*d.ay+d.az*d.az)),
+    roll : Math.atan2(d.ay, Math.sqrt(d.ax*d.ax+d.az*d.az))
   };
 }
 
-// normal bidang
 function normalWall(a){
   return {x:Math.sin(a.roll), y:0, z:Math.cos(a.roll)};
 }
@@ -168,19 +133,19 @@ function normalFloor(a){
   return {x:0, y:Math.sin(a.pitch), z:Math.cos(a.pitch)};
 }
 
-function angleBetweenNormals(n1,n2){
-  const dot = n1.x*n2.x + n1.y*n2.y + n1.z*n2.z;
-  const m1 = Math.sqrt(n1.x**2+n1.y**2+n1.z**2);
-  const m2 = Math.sqrt(n2.x**2+n2.y**2+n2.z**2);
+function angleBetween(n1,n2){
+  const dot=n1.x*n2.x+n1.y*n2.y+n1.z*n2.z;
+  const m1=Math.hypot(n1.x,n1.y,n1.z);
+  const m2=Math.hypot(n2.x,n2.y,n2.z);
   return Math.acos(dot/(m1*m2))*180/Math.PI;
 }
 
-/* ================= SAVE ================= */
+/* ===== SAVE ===== */
 function saveWall(){
   fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
     savedWall=d;
     wallView.scene.clear();
-    const w=createPlane(2,2);
+    const w=plane(2,2);
     applyRotation(w,d);
     wallView.scene.add(w);
     updateCombine();
@@ -191,7 +156,7 @@ function saveFloor(){
   fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
     savedFloor=d;
     floorView.scene.clear();
-    const f=createPlane(2,2);
+    const f=plane(2,2);
     applyRotation(f,d);
     f.rotation.x+=Math.PI/2;
     floorView.scene.add(f);
@@ -199,58 +164,48 @@ function saveFloor(){
   });
 }
 
-/* ================= COMBINE ================= */
+/* ===== COMBINE ===== */
 function updateCombine(){
   if(!savedWall||!savedFloor)return;
-
   combView.scene.clear();
-
-  const w=createPlane(2,2);
-  applyRotation(w,savedWall);
-  w.position.x=-1;
-
-  const f=createPlane(2,2);
-  applyRotation(f,savedFloor);
-  f.rotation.x+=Math.PI/2;
-  f.position.y=-1;
-
-  combView.scene.add(w);
-  combView.scene.add(f);
 
   const aw=getAngles(savedWall);
   const af=getAngles(savedFloor);
 
-  const angle=angleBetweenNormals(
+  const angle=angleBetween(
     normalWall(aw),
     normalFloor(af)
   );
 
-  document.getElementById("angle").innerText =
-    angle.toFixed(2)+"°";
+  document.getElementById("angle").innerText=angle.toFixed(2)+"°";
 }
 
-/* ================= RESET ================= */
+/* ===== RESET ===== */
 function resetAll(){
-  savedWall=null;
-  savedFloor=null;
+  savedWall=savedFloor=null;
   wallView.scene.clear();
   floorView.scene.clear();
   combView.scene.clear();
   document.getElementById("angle").innerText="-";
 }
 
-/* ================= LOOP ================= */
-function animate(){
-  fetch(`${ESP32}/data`)
-    .then(r=>r.json())
-    .then(d=>applyRotation(livePlane,d));
+/* ===== LOOP WITH DELAY ===== */
+function animate(time){
+  if(time-lastFetch>FETCH_DELAY){
+    lastFetch=time;
+    fetch(`${ESP32}/data`)
+      .then(r=>r.json())
+      .then(d=>applyRotation(livePlane,d))
+      .catch(()=>{});
+  }
 
   [liveView,wallView,floorView,combView].forEach(v=>{
     v.renderer.render(v.scene,v.camera);
   });
+
   requestAnimationFrame(animate);
 }
-animate();
+animate(0);
 </script>
 
 </body>
