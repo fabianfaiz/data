@@ -6,58 +6,134 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 
 <style>
+:root{
+  --primary:#1e88e5;
+  --bg:#f4f6f8;
+  --card:#ffffff;
+  --text:#2c3e50;
+}
+
+*{
+  box-sizing:border-box;
+}
+
 body{
-  font-family:Segoe UI,Arial,sans-serif;
-  background:#f4f6f8;
+  font-family:"Segoe UI",Roboto,Arial,sans-serif;
+  background:var(--bg);
   margin:0;
   padding:24px;
-  color:#2c3e50;
+  color:var(--text);
 }
-h3{margin:0}
-.subtitle{color:#666;margin-bottom:20px}
-.top-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+
+h3{
+  margin:0;
+  font-weight:600;
+  letter-spacing:.3px;
+}
+
+.subtitle{
+  margin-top:6px;
+  margin-bottom:22px;
+  color:#666;
+  font-size:14px;
+}
+
+/* ===== TOP BAR ===== */
+.top-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:center;
+  margin-bottom:22px;
+}
+
 .angle-box{
-  background:#1e88e5;
+  background:linear-gradient(135deg,#1e88e5,#42a5f5);
   color:#fff;
   padding:12px 20px;
   border-radius:12px;
+  font-size:16px;
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
 }
+
+/* ===== BUTTON ===== */
 button{
-  padding:10px 16px;
   border:none;
+  padding:10px 18px;
   border-radius:10px;
   cursor:pointer;
+  font-size:14px;
+  font-weight:500;
+  background:#fff;
+  color:#333;
+  box-shadow:0 6px 14px rgba(0,0,0,.12);
+  transition:.2s ease;
 }
-.btn-reset{background:#e53935;color:#fff}
+
+button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 10px 20px rgba(0,0,0,.18);
+}
+
+.btn-reset{
+  background:#e53935;
+  color:#fff;
+}
+
+/* ===== GRID ===== */
 .grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
-  gap:16px;
+  gap:18px;
 }
+
+/* ===== CARD ===== */
 .box{
-  background:#fff;
-  border-radius:14px;
-  padding:12px;
-  text-align:center;
+  background:var(--card);
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 10px 22px rgba(0,0,0,.08);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
 }
-canvas{
-  width:100%!important;
-  max-width:220px;
+
+.box-title{
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:10px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:#555;
+}
+
+/* ===== CANVAS ===== */
+.box canvas{
+  width:100% !important;
+  height:auto !important;
+  max-width:240px;
   aspect-ratio:1/1;
+  background:#000;
+  border-radius:12px;
 }
+
+/* ===== FOOTER ===== */
 footer{
   margin-top:30px;
-  text-align:center;
   font-size:12px;
   color:#888;
+  text-align:center;
 }
 </style>
+
 </head>
 
 <body>
 
 <h3>Visualisasi Kemiringan Ruangan</h3>
-<div class="subtitle">ESP32 + MPU6050</div>
+<div class="subtitle">
+Sistem Pengukuran Sudut Dinding dan Lantai (ESP32 + MPU6050)
+</div>
 
 <div class="top-bar">
   <div class="angle-box">
@@ -69,24 +145,23 @@ footer{
 </div>
 
 <div class="grid">
-  <div class="box"><b>Live</b><div id="live"></div></div>
-  <div class="box"><b>Dinding</b><div id="wall"></div></div>
-  <div class="box"><b>Lantai</b><div id="floor"></div></div>
-  <div class="box"><b>Gabungan</b><div id="combine"></div></div>
+  <div class="box"><div class="box-title">Live</div><div id="live"></div></div>
+  <div class="box"><div class="box-title">Dinding</div><div id="wall"></div></div>
+  <div class="box"><div class="box-title">Lantai</div><div id="floor"></div></div>
+  <div class="box"><div class="box-title">Gabungan (L)</div><div id="combine"></div></div>
 </div>
 
-<footer>Monitoring Kemiringan Ruangan</footer>
+<footer>© Monitoring Kemiringan Ruangan</footer>
 
 <script>
-/* ===== CONFIG ===== */
+/* ================= CONFIG ================= */
 const ESP32 = "http://192.168.1.16";
-const FETCH_DELAY = 200; // ms
 
+/* ================= STATE ================= */
 let savedWall = null;
 let savedFloor = null;
-let lastFetch = 0;
 
-/* ===== THREE SETUP ===== */
+/* ================= VIEW ================= */
 function createView(id){
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70,1,0.1,100);
@@ -103,29 +178,33 @@ const wallView  = createView("wall");
 const floorView = createView("floor");
 const combView  = createView("combine");
 
-function plane(w,h){
+/* ================= OBJECT ================= */
+function createPlane(w,h){
   return new THREE.Mesh(
     new THREE.BoxGeometry(w,h,0.1),
     new THREE.MeshNormalMaterial()
   );
 }
 
-const livePlane = plane(2,0.3);
+/* ================= LIVE ================= */
+const livePlane = createPlane(2,0.3);
 liveView.scene.add(livePlane);
 
-/* ===== ROTATION ===== */
+/* ================= ROTATION ================= */
 function applyRotation(obj,d){
-  obj.rotation.x = Math.atan2(d.ax, Math.sqrt(d.ay*d.ay+d.az*d.az));
-  obj.rotation.z = Math.atan2(d.ay, Math.sqrt(d.ax*d.ax+d.az*d.az));
+  obj.rotation.x = Math.atan2(d.ax,Math.sqrt(d.ay*d.ay+d.az*d.az));
+  obj.rotation.z = Math.atan2(d.ay,Math.sqrt(d.ax*d.ax+d.az*d.az));
 }
 
+/* ================= ANGLE UTILS ================= */
 function getAngles(d){
-  return {
-    pitch: Math.atan2(d.ax, Math.sqrt(d.ay*d.ay+d.az*d.az)),
-    roll : Math.atan2(d.ay, Math.sqrt(d.ax*d.ax+d.az*d.az))
+  return{
+    pitch:Math.atan2(d.ax,Math.sqrt(d.ay*d.ay+d.az*d.az)),
+    roll :Math.atan2(d.ay,Math.sqrt(d.ax*d.ax+d.az*d.az))
   };
 }
 
+// normal bidang
 function normalWall(a){
   return {x:Math.sin(a.roll), y:0, z:Math.cos(a.roll)};
 }
@@ -133,19 +212,19 @@ function normalFloor(a){
   return {x:0, y:Math.sin(a.pitch), z:Math.cos(a.pitch)};
 }
 
-function angleBetween(n1,n2){
-  const dot=n1.x*n2.x+n1.y*n2.y+n1.z*n2.z;
-  const m1=Math.hypot(n1.x,n1.y,n1.z);
-  const m2=Math.hypot(n2.x,n2.y,n2.z);
+function angleBetweenNormals(n1,n2){
+  const dot = n1.x*n2.x + n1.y*n2.y + n1.z*n2.z;
+  const m1 = Math.sqrt(n1.x**2+n1.y**2+n1.z**2);
+  const m2 = Math.sqrt(n2.x**2+n2.y**2+n2.z**2);
   return Math.acos(dot/(m1*m2))*180/Math.PI;
 }
 
-/* ===== SAVE ===== */
+/* ================= SAVE ================= */
 function saveWall(){
   fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
     savedWall=d;
     wallView.scene.clear();
-    const w=plane(2,2);
+    const w=createPlane(2,2);
     applyRotation(w,d);
     wallView.scene.add(w);
     updateCombine();
@@ -156,7 +235,7 @@ function saveFloor(){
   fetch(`${ESP32}/data`).then(r=>r.json()).then(d=>{
     savedFloor=d;
     floorView.scene.clear();
-    const f=plane(2,2);
+    const f=createPlane(2,2);
     applyRotation(f,d);
     f.rotation.x+=Math.PI/2;
     floorView.scene.add(f);
@@ -164,48 +243,58 @@ function saveFloor(){
   });
 }
 
-/* ===== COMBINE ===== */
+/* ================= COMBINE ================= */
 function updateCombine(){
   if(!savedWall||!savedFloor)return;
+
   combView.scene.clear();
+
+  const w=createPlane(2,2);
+  applyRotation(w,savedWall);
+  w.position.x=-1;
+
+  const f=createPlane(2,2);
+  applyRotation(f,savedFloor);
+  f.rotation.x+=Math.PI/2;
+  f.position.y=-1;
+
+  combView.scene.add(w);
+  combView.scene.add(f);
 
   const aw=getAngles(savedWall);
   const af=getAngles(savedFloor);
 
-  const angle=angleBetween(
+  const angle=angleBetweenNormals(
     normalWall(aw),
     normalFloor(af)
   );
 
-  document.getElementById("angle").innerText=angle.toFixed(2)+"°";
+  document.getElementById("angle").innerText =
+    angle.toFixed(2)+"°";
 }
 
-/* ===== RESET ===== */
+/* ================= RESET ================= */
 function resetAll(){
-  savedWall=savedFloor=null;
+  savedWall=null;
+  savedFloor=null;
   wallView.scene.clear();
   floorView.scene.clear();
   combView.scene.clear();
   document.getElementById("angle").innerText="-";
 }
 
-/* ===== LOOP WITH DELAY ===== */
-function animate(time){
-  if(time-lastFetch>FETCH_DELAY){
-    lastFetch=time;
-    fetch(`${ESP32}/data`)
-      .then(r=>r.json())
-      .then(d=>applyRotation(livePlane,d))
-      .catch(()=>{});
-  }
+/* ================= LOOP ================= */
+function animate(){
+  fetch(`${ESP32}/data`)
+    .then(r=>r.json())
+    .then(d=>applyRotation(livePlane,d));
 
   [liveView,wallView,floorView,combView].forEach(v=>{
     v.renderer.render(v.scene,v.camera);
   });
-
   requestAnimationFrame(animate);
 }
-animate(0);
+animate();
 </script>
 
 </body>
